@@ -1,0 +1,31 @@
+name: BloodPlugin
+version: '${project.version}'
+main: hu.bloodplugin.BloodPlugin
+api-version: '1.21'
+description: Blood-themed items, events and mechanics
+authors: [BloodPlugin]
+
+commands:
+  bloodmoon:
+    description: Schedule a guaranteed Blood Moon for the next night
+    usage: /bloodmoon
+    permission: bloodplugin.bloodmoon
+  legendary:
+    description: Give legendary blood items
+    usage: /legendary [item]
+    permission: bloodplugin.legendary
+  altarspawn:
+    description: Spawn a Blood Altar at your location
+    usage: /altarspawn
+    permission: bloodplugin.altarspawn
+
+permissions:
+  bloodplugin.bloodmoon:
+    description: Allows scheduling a Blood Moon
+    default: op
+  bloodplugin.legendary:
+    description: Allows using the /legendary command
+    default: op
+  bloodplugin.altarspawn:
+    description: Allows spawning a Blood Altar
+    default: op

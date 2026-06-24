@@ -1,0 +1,11 @@
+blood-moon:
+  chance: 0.20  # 20% chance each night
+
+blood-drop:
+  death-chance: 0.20  # 20% on mob kill
+
+blood-ore:
+  vein-size: 4
+  attempts-per-chunk: 6
+  min-y: -64
+  max-y: 16
