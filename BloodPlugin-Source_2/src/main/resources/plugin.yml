@@ -18,14 +18,15 @@ commands:
     description: Spawn a Blood Altar at your location
     usage: /altarspawn
     permission: bloodplugin.altarspawn
+  altarcleanup:
+    description: Remove all altar holograms and entities
+    usage: /altarcleanup
+    permission: bloodplugin.altarspawn
 
 permissions:
   bloodplugin.bloodmoon:
-    description: Allows scheduling a Blood Moon
     default: op
   bloodplugin.legendary:
-    description: Allows using the /legendary command
     default: op
   bloodplugin.altarspawn:
-    description: Allows spawning a Blood Altar
     default: op

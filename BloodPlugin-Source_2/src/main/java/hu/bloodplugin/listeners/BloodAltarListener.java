@@ -35,16 +35,15 @@ public class BloodAltarListener implements Listener {
     private final Map<String, List<ArmorStand>> altarHolograms = new HashMap<>();
     private final Map<String, BukkitTask> altarTasks = new HashMap<>();
 
-    // Persisted to file
     private boolean maceCrafted = false;
     private final File stateFile;
 
     public BloodAltarListener(BloodPlugin plugin) {
-        this.plugin         = plugin;
-        this.ALTAR_KEY      = new NamespacedKey(plugin, "blood_altar");
-        this.ALTAR_LOC_KEY  = new NamespacedKey(plugin, "blood_altar_loc");
-        this.ALTAR_HOLO_KEY = new NamespacedKey(plugin, "blood_altar_holo");
-        this.stateFile      = new File(plugin.getDataFolder(), "altar_state.txt");
+        this.plugin        = plugin;
+        this.ALTAR_KEY     = new NamespacedKey(plugin, "blood_altar");
+        this.ALTAR_LOC_KEY = new NamespacedKey(plugin, "blood_altar_loc");
+        this.ALTAR_HOLO_KEY= new NamespacedKey(plugin, "blood_altar_holo");
+        this.stateFile     = new File(plugin.getDataFolder(), "altar_state.txt");
         loadState();
     }
 
@@ -52,11 +51,8 @@ public class BloodAltarListener implements Listener {
     private void loadState() {
         if (!stateFile.exists()) { maceCrafted = false; return; }
         try (BufferedReader br = new BufferedReader(new FileReader(stateFile))) {
-            String line = br.readLine();
-            maceCrafted = "true".equalsIgnoreCase(line);
-        } catch (IOException e) {
-            maceCrafted = false;
-        }
+            maceCrafted = "true".equalsIgnoreCase(br.readLine());
+        } catch (IOException e) { maceCrafted = false; }
     }
 
     private void saveState() {
@@ -73,14 +69,17 @@ public class BloodAltarListener implements Listener {
         saveState();
     }
 
+    public boolean isMaceCrafted() { return maceCrafted; }
+
     // ─── /altarspawn ──────────────────────────────────────────────
     public void spawnAltar(Location loc) {
         World world = loc.getWorld();
         if (world == null) return;
-
         String key = locKey(loc);
+
+        // Clean up anything existing at this location first
         removeDisplay(key);
-        cleanupHologramsAt(loc, world);
+        cleanupNearby(loc, world);
 
         loc.getBlock().setType(Material.BARRIER);
 
@@ -113,9 +112,9 @@ public class BloodAltarListener implements Listener {
         if (!isAltar(entity)) return;
         event.setCancelled(true);
 
-        String key = entity.getPersistentDataContainer().get(ALTAR_LOC_KEY, PersistentDataType.STRING);
+        String key = entity.getPersistentDataContainer()
+                .get(ALTAR_LOC_KEY, PersistentDataType.STRING);
         if (key == null) return;
-
         Location loc = keyToLoc(key, entity.getWorld());
         handleClick(event.getPlayer(), key, loc, entity);
     }
@@ -131,19 +130,14 @@ public class BloodAltarListener implements Listener {
         for (Entity e : bLoc.getWorld().getNearbyEntities(bLoc.clone().add(0.5, 0.5, 0.5), 1, 1, 1)) {
             if (!isAltar(e)) continue;
             event.setCancelled(true);
-            String key = e.getPersistentDataContainer().get(ALTAR_LOC_KEY, PersistentDataType.STRING);
+            String key = e.getPersistentDataContainer()
+                    .get(ALTAR_LOC_KEY, PersistentDataType.STRING);
             if (key == null) return;
             handleClick(event.getPlayer(), key, bLoc, e);
             return;
         }
     }
 
-    @EventHandler
-    public void onDamage(EntityDamageByEntityEvent event) {
-        if (isAltar(event.getEntity())) event.setCancelled(true);
-    }
-
-    // When barrier block is broken, remove the altar display and hitbox stand
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
@@ -152,15 +146,21 @@ public class BloodAltarListener implements Listener {
         Location bLoc = block.getLocation();
         String key = locKey(bLoc);
 
-        // Remove display
+        // Remove display immediately
         removeDisplay(key);
 
         // Remove hitbox ArmorStand
-        for (Entity e : bLoc.getWorld().getNearbyEntities(bLoc.clone().add(0.5, 0.5, 0.5), 1, 1, 1)) {
+        for (Entity e : bLoc.getWorld().getNearbyEntities(bLoc.clone().add(0.5, 0.5, 0.5), 1, 2, 1)) {
             if (isAltar(e)) e.remove();
         }
     }
 
+    @EventHandler
+    public void onDamage(EntityDamageByEntityEvent event) {
+        if (isAltar(event.getEntity())) event.setCancelled(true);
+    }
+
+    // ─── Click handler ────────────────────────────────────────────
     private void handleClick(Player player, String key, Location loc, Entity altarEntity) {
         ItemStack held = player.getInventory().getItemInMainHand();
         if (player.isOp() && BloodItems.is(held, BloodItems.BLOOD_MACE_KEY)) {
@@ -175,7 +175,8 @@ public class BloodAltarListener implements Listener {
     // ─── Craft ────────────────────────────────────────────────────
     private void attemptCraft(Player player, String key, Location loc, Entity altarEntity) {
         if (maceCrafted) {
-            player.sendMessage(Component.text("A Blood Mace már elkészült ezen a szerveren!", NamedTextColor.DARK_RED));
+            player.sendMessage(Component.text(
+                "A Blood Mace már elkészült ezen a szerveren!", NamedTextColor.DARK_RED));
             return;
         }
         if (hasItem(player, BloodItems.BLOOD_MACE_KEY)) {
@@ -183,7 +184,8 @@ public class BloodAltarListener implements Listener {
             return;
         }
         if (!hasIngredients(player)) {
-            player.sendMessage(Component.text("Kell: 8 Netherite Ingot + 4 Vércsepp + 1 Mace", NamedTextColor.DARK_RED));
+            player.sendMessage(Component.text(
+                "Kell: 8 Netherite Ingot + 4 Vércsepp + 1 Mace", NamedTextColor.DARK_RED));
             return;
         }
 
@@ -200,7 +202,8 @@ public class BloodAltarListener implements Listener {
         }
 
         for (Player p : plugin.getServer().getOnlinePlayers()) {
-            p.sendMessage(Component.text("☽ " + player.getName() + " elkészítette a Blood Mace-t! ☽", NamedTextColor.DARK_RED));
+            p.sendMessage(Component.text("☽ " + player.getName() +
+                " elkészítette a Blood Mace-t! ☽", NamedTextColor.DARK_RED));
         }
 
         removeDisplay(key);
@@ -274,46 +277,69 @@ public class BloodAltarListener implements Listener {
         if (task != null) task.cancel();
     }
 
-    // ─── Cleanup orphaned holograms on startup ────────────────────
+    // ─── Startup cleanup ──────────────────────────────────────────
+    // Called on plugin enable - removes ALL altar-related entities,
+    // then re-registers active altars (barrier blocks with nearby hitbox stands)
     public void cleanupAllOrphanedHolograms() {
-        // Only remove hologram stands where the matching altar ArmorStand no longer exists
         for (World world : Bukkit.getWorlds()) {
+            // First collect all active altar keys (hitbox stands that still exist)
+            Set<String> activeKeys = new HashSet<>();
+            for (Entity e : world.getEntities()) {
+                if (!isAltar(e)) continue;
+                String k = e.getPersistentDataContainer()
+                        .get(ALTAR_LOC_KEY, PersistentDataType.STRING);
+                if (k != null) activeKeys.add(k);
+            }
+
+            // Remove holograms that don't have a matching active altar
             for (Entity e : world.getEntities()) {
                 if (!(e instanceof ArmorStand as)) continue;
                 if (!as.getPersistentDataContainer().has(ALTAR_HOLO_KEY, PersistentDataType.STRING)) continue;
-
-                String holoKey = as.getPersistentDataContainer().get(ALTAR_HOLO_KEY, PersistentDataType.STRING);
-                if (holoKey == null) { as.remove(); continue; }
-
-                // Check if a matching altar hitbox still exists nearby
-                boolean altarExists = false;
-                for (Entity nearby : world.getNearbyEntities(as.getLocation(), 6, 6, 6)) {
-                    if (!(nearby instanceof ArmorStand nearAs)) continue;
-                    if (!nearAs.getPersistentDataContainer().has(ALTAR_KEY, PersistentDataType.BYTE)) continue;
-                    String nearKey = nearAs.getPersistentDataContainer().get(ALTAR_LOC_KEY, PersistentDataType.STRING);
-                    if (holoKey.equals(nearKey)) { altarExists = true; break; }
+                String holoKey = as.getPersistentDataContainer()
+                        .get(ALTAR_HOLO_KEY, PersistentDataType.STRING);
+                if (!activeKeys.contains(holoKey)) {
+                    as.remove();
                 }
-
-                if (!altarExists) as.remove();
             }
-        }
-    }
 
-    private void cleanupHologramsAt(Location loc, World world) {
-        for (Entity e : world.getNearbyEntities(loc.clone().add(0.5, 1.5, 0.5), 2, 3, 2)) {
-            if (!(e instanceof ArmorStand as)) continue;
-            if (as.getPersistentDataContainer().has(ALTAR_HOLO_KEY, PersistentDataType.STRING)) {
-                as.remove();
+            // Remove floating items that belong to gone altars
+            for (Entity e : world.getEntities()) {
+                if (!(e instanceof Item dropped)) continue;
+                if (dropped.getPersistentDataContainer().has(ALTAR_KEY, PersistentDataType.BYTE)) {
+                    // Check if there's still an active altar nearby
+                    boolean found = false;
+                    for (String k : activeKeys) {
+                        Location kLoc = keyToLoc(k, world);
+                        if (dropped.getLocation().distance(kLoc) < 5) { found = true; break; }
+                    }
+                    if (!found) dropped.remove();
+                }
             }
-            if (e instanceof Item dropped) {
-                if (dropped.getPersistentDataContainer().has(new NamespacedKey(plugin, "blood_altar"), PersistentDataType.BYTE)) {
-                    dropped.remove();
+
+            // Re-register active altars so rotation tasks restart
+            for (String key : activeKeys) {
+                Location loc = keyToLoc(key, world);
+                if (!altarTasks.containsKey(key)) {
+                    spawnDisplay(key, loc, BloodItems.createBloodMace());
                 }
             }
         }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────
+    private void cleanupNearby(Location loc, World world) {
+        for (Entity e : world.getNearbyEntities(loc.clone().add(0.5, 1.5, 0.5), 2, 4, 2)) {
+            if (e instanceof ArmorStand as) {
+                if (as.getPersistentDataContainer().has(ALTAR_HOLO_KEY, PersistentDataType.STRING)
+                 || isAltar(as)) as.remove();
+            }
+            if (e instanceof Item dropped) {
+                if (dropped.getPersistentDataContainer().has(ALTAR_KEY, PersistentDataType.BYTE))
+                    dropped.remove();
+            }
+        }
+    }
+
     private String locKey(Location loc) {
         return loc.getWorld().getName() + "," + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
     }
@@ -333,9 +359,11 @@ public class BloodAltarListener implements Listener {
         int netherite = 0, bloodDrop = 0, mace = 0;
         for (ItemStack item : player.getInventory().getContents()) {
             if (item == null) continue;
-            if (item.getType() == Material.NETHERITE_INGOT && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY)) netherite += item.getAmount();
+            if (item.getType() == Material.NETHERITE_INGOT && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY))
+                netherite += item.getAmount();
             if (BloodItems.is(item, BloodItems.BLOOD_DROP_KEY)) bloodDrop += item.getAmount();
-            if (item.getType() == Material.MACE && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY)) mace += item.getAmount();
+            if (item.getType() == Material.MACE && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY))
+                mace += item.getAmount();
         }
         return netherite >= 8 && bloodDrop >= 4 && mace >= 1;
     }

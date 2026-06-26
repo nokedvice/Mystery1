@@ -1,8 +1,6 @@
 package hu.bloodplugin;
 
-import hu.bloodplugin.commands.AltarSpawnCommand;
-import hu.bloodplugin.commands.BloodMoonCommand;
-import hu.bloodplugin.commands.LegendaryCommand;
+import hu.bloodplugin.commands.*;
 import hu.bloodplugin.items.BloodItems;
 import hu.bloodplugin.listeners.*;
 import hu.bloodplugin.managers.BloodMoonManager;
@@ -19,7 +17,6 @@ public class BloodPlugin extends JavaPlugin {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
-
         BloodItems.init(this);
 
         bloodMoonManager = new BloodMoonManager(this);
@@ -27,7 +24,7 @@ public class BloodPlugin extends JavaPlugin {
 
         BloodAltarListener altarListener = new BloodAltarListener(this);
 
-        // Clean up orphaned holograms from previous session
+        // After 1 tick, clean up orphaned holograms
         getServer().getScheduler().runTaskLater(this, () ->
             altarListener.cleanupAllOrphanedHolograms(), 20L);
 
@@ -48,6 +45,7 @@ public class BloodPlugin extends JavaPlugin {
         getCommand("legendary").setTabCompleter(legendaryCmd);
 
         getCommand("altarspawn").setExecutor(new AltarSpawnCommand(this, altarListener));
+        getCommand("altarcleanup").setExecutor(new AltarCleanupCommand(this));
 
         bloodMoonManager.startNightChecker();
 
