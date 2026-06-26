@@ -27,6 +27,10 @@ public class BloodPlugin extends JavaPlugin {
 
         BloodAltarListener altarListener = new BloodAltarListener(this);
 
+        // Clean up orphaned holograms from previous session
+        getServer().getScheduler().runTaskLater(this, () ->
+            altarListener.cleanupAllOrphanedHolograms(), 20L);
+
         getServer().getPluginManager().registerEvents(new BloodDropListener(this), this);
         getServer().getPluginManager().registerEvents(new FinisherPotionListener(this), this);
         getServer().getPluginManager().registerEvents(new BloodGemListener(this), this);
@@ -37,10 +41,9 @@ public class BloodPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BloodMaceListener(this), this);
         getServer().getPluginManager().registerEvents(new ItemLimitListener(this), this);
 
-        BloodMoonCommand bloodMoonCmd = new BloodMoonCommand(this, bloodMoonManager);
-        getCommand("bloodmoon").setExecutor(bloodMoonCmd);
+        getCommand("bloodmoon").setExecutor(new BloodMoonCommand(this, bloodMoonManager));
 
-        LegendaryCommand legendaryCmd = new LegendaryCommand(this);
+        LegendaryCommand legendaryCmd = new LegendaryCommand(this, altarListener);
         getCommand("legendary").setExecutor(legendaryCmd);
         getCommand("legendary").setTabCompleter(legendaryCmd);
 

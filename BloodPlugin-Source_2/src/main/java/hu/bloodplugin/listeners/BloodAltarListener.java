@@ -20,6 +20,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
+import java.io.*;
 import java.util.*;
 
 public class BloodAltarListener implements Listener {
@@ -28,21 +29,47 @@ public class BloodAltarListener implements Listener {
     private final NamespacedKey ALTAR_KEY;
     private final NamespacedKey ALTAR_LOC_KEY;
     private final NamespacedKey ALTAR_HOLO_KEY;
-    private final NamespacedKey ALTAR_USED_KEY; // marks altar as used (mace already crafted)
 
-    private final Map<String, Item> altarItems             = new HashMap<>();
+    private final Map<String, Item> altarItems = new HashMap<>();
     private final Map<String, List<ArmorStand>> altarHolograms = new HashMap<>();
-    private final Map<String, BukkitTask> altarTasks       = new HashMap<>();
+    private final Map<String, BukkitTask> altarTasks = new HashMap<>();
 
-    // Track whether the server-wide Blood Mace has been crafted
+    // Persisted to file
     private boolean maceCrafted = false;
+    private final File stateFile;
 
     public BloodAltarListener(BloodPlugin plugin) {
         this.plugin         = plugin;
         this.ALTAR_KEY      = new NamespacedKey(plugin, "blood_altar");
         this.ALTAR_LOC_KEY  = new NamespacedKey(plugin, "blood_altar_loc");
         this.ALTAR_HOLO_KEY = new NamespacedKey(plugin, "blood_altar_holo");
-        this.ALTAR_USED_KEY = new NamespacedKey(plugin, "blood_altar_used");
+        this.stateFile      = new File(plugin.getDataFolder(), "altar_state.txt");
+        loadState();
+    }
+
+    // ─── State persistence ────────────────────────────────────────
+    private void loadState() {
+        if (!stateFile.exists()) { maceCrafted = false; return; }
+        try (BufferedReader br = new BufferedReader(new FileReader(stateFile))) {
+            String line = br.readLine();
+            maceCrafted = "true".equalsIgnoreCase(line);
+        } catch (IOException e) {
+            maceCrafted = false;
+        }
+    }
+
+    private void saveState() {
+        plugin.getDataFolder().mkdirs();
+        try (PrintWriter pw = new PrintWriter(new FileWriter(stateFile))) {
+            pw.println(maceCrafted);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Could not save altar state: " + e.getMessage());
+        }
+    }
+
+    public void resetMaceCrafted() {
+        maceCrafted = false;
+        saveState();
     }
 
     // ─── /altarspawn ──────────────────────────────────────────────
@@ -52,6 +79,7 @@ public class BloodAltarListener implements Listener {
 
         String key = locKey(loc);
         removeDisplay(key);
+        cleanupHologramsAt(loc, world);
 
         loc.getBlock().setType(Material.BARRIER);
 
@@ -68,7 +96,7 @@ public class BloodAltarListener implements Listener {
         hitbox.getPersistentDataContainer().set(ALTAR_KEY, PersistentDataType.BYTE, (byte) 1);
         hitbox.getPersistentDataContainer().set(ALTAR_LOC_KEY, PersistentDataType.STRING, key);
 
-        spawnDisplay(key, loc, BloodItems.createBloodMace(), false);
+        spawnDisplay(key, loc, BloodItems.createBloodMace());
     }
 
     public boolean isAltar(Entity e) {
@@ -76,7 +104,7 @@ public class BloodAltarListener implements Listener {
         return as.getPersistentDataContainer().has(ALTAR_KEY, PersistentDataType.BYTE);
     }
 
-    // ─── Interact with ArmorStand hitbox ──────────────────────────
+    // ─── Events ───────────────────────────────────────────────────
     @EventHandler
     public void onInteractEntity(PlayerInteractAtEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -84,22 +112,13 @@ public class BloodAltarListener implements Listener {
         if (!isAltar(entity)) return;
         event.setCancelled(true);
 
-        String key = entity.getPersistentDataContainer()
-                .get(ALTAR_LOC_KEY, PersistentDataType.STRING);
+        String key = entity.getPersistentDataContainer().get(ALTAR_LOC_KEY, PersistentDataType.STRING);
         if (key == null) return;
-
-        // Check if already used
-        if (entity.getPersistentDataContainer().has(ALTAR_USED_KEY, PersistentDataType.BYTE)) {
-            event.getPlayer().sendMessage(Component.text(
-                "Ez az oltár már fel lett használva. A Blood Mace elkészült.", NamedTextColor.DARK_RED));
-            return;
-        }
 
         Location loc = keyToLoc(key, entity.getWorld());
         handleClick(event.getPlayer(), key, loc, entity);
     }
 
-    // ─── Interact with Barrier block ──────────────────────────────
     @EventHandler
     public void onInteractBlock(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -111,83 +130,11 @@ public class BloodAltarListener implements Listener {
         for (Entity e : bLoc.getWorld().getNearbyEntities(bLoc.clone().add(0.5, 0.5, 0.5), 1, 1, 1)) {
             if (!isAltar(e)) continue;
             event.setCancelled(true);
-
-            if (e.getPersistentDataContainer().has(ALTAR_USED_KEY, PersistentDataType.BYTE)) {
-                event.getPlayer().sendMessage(Component.text(
-                    "Ez az oltár már fel lett használva.", NamedTextColor.DARK_RED));
-                return;
-            }
-
-            String key = e.getPersistentDataContainer()
-                    .get(ALTAR_LOC_KEY, PersistentDataType.STRING);
+            String key = e.getPersistentDataContainer().get(ALTAR_LOC_KEY, PersistentDataType.STRING);
             if (key == null) return;
             handleClick(event.getPlayer(), key, bLoc, e);
             return;
         }
-    }
-
-    private void handleClick(Player player, String key, Location loc, Entity altarEntity) {
-        ItemStack held = player.getInventory().getItemInMainHand();
-
-        // Op + Blood Mace in hand → update display
-        if (player.isOp() && BloodItems.is(held, BloodItems.BLOOD_MACE_KEY)) {
-            removeDisplay(key);
-            spawnDisplay(key, loc, held.clone(), false);
-            player.sendMessage(Component.text("✦ Altar display frissítve!", NamedTextColor.GOLD));
-            return;
-        }
-
-        attemptCraft(player, key, loc, altarEntity);
-    }
-
-    // ─── Craft – once per server ───────────────────────────────────
-    private void attemptCraft(Player player, String key, Location loc, Entity altarEntity) {
-        if (maceCrafted) {
-            player.sendMessage(Component.text(
-                "A Blood Mace már elkészült ezen a szerveren!", NamedTextColor.DARK_RED));
-            return;
-        }
-        if (hasItem(player, BloodItems.BLOOD_MACE_KEY)) {
-            player.sendMessage(Component.text("Már van egy Blood Mace-ed!", NamedTextColor.RED));
-            return;
-        }
-        if (!hasIngredients(player)) {
-            player.sendMessage(Component.text(
-                "Kell: 8 Netherite Ingot + 4 Vércsepp + 1 Mace", NamedTextColor.DARK_RED));
-            return;
-        }
-
-        consumeIngredients(player);
-        player.getInventory().addItem(BloodItems.createBloodMace());
-        maceCrafted = true;
-
-        // Mark altar as used
-        if (altarEntity instanceof ArmorStand as) {
-            as.getPersistentDataContainer().set(ALTAR_USED_KEY, PersistentDataType.BYTE, (byte) 1);
-        }
-
-        // Effects
-        World w = loc.getWorld();
-        if (w != null) {
-            w.spawnParticle(Particle.DUST, loc.clone().add(0.5, 1.5, 0.5),
-                    80, 0.8, 0.8, 0.8, new Particle.DustOptions(Color.RED, 2f));
-            w.playSound(loc, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.8f, 0.6f);
-        }
-
-        // Broadcast to whole server
-        for (Player p : plugin.getServer().getOnlinePlayers()) {
-            p.sendMessage(Component.text("☽ " + player.getName() +
-                " elkészítette a Blood Mace-t! ☽", NamedTextColor.DARK_RED));
-        }
-
-        // Remove display – altar is consumed
-        removeDisplay(key);
-
-        // Remove the barrier block and the hitbox ArmorStand
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            loc.getBlock().setType(Material.AIR);
-            altarEntity.remove();
-        }, 40L);
     }
 
     @EventHandler
@@ -195,8 +142,57 @@ public class BloodAltarListener implements Listener {
         if (isAltar(event.getEntity())) event.setCancelled(true);
     }
 
+    private void handleClick(Player player, String key, Location loc, Entity altarEntity) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        if (player.isOp() && BloodItems.is(held, BloodItems.BLOOD_MACE_KEY)) {
+            removeDisplay(key);
+            spawnDisplay(key, loc, held.clone());
+            player.sendMessage(Component.text("✦ Altar display frissítve!", NamedTextColor.GOLD));
+            return;
+        }
+        attemptCraft(player, key, loc, altarEntity);
+    }
+
+    // ─── Craft ────────────────────────────────────────────────────
+    private void attemptCraft(Player player, String key, Location loc, Entity altarEntity) {
+        if (maceCrafted) {
+            player.sendMessage(Component.text("A Blood Mace már elkészült ezen a szerveren!", NamedTextColor.DARK_RED));
+            return;
+        }
+        if (hasItem(player, BloodItems.BLOOD_MACE_KEY)) {
+            player.sendMessage(Component.text("Már van egy Blood Mace-ed!", NamedTextColor.RED));
+            return;
+        }
+        if (!hasIngredients(player)) {
+            player.sendMessage(Component.text("Kell: 8 Netherite Ingot + 4 Vércsepp + 1 Mace", NamedTextColor.DARK_RED));
+            return;
+        }
+
+        consumeIngredients(player);
+        player.getInventory().addItem(BloodItems.createBloodMace());
+        maceCrafted = true;
+        saveState();
+
+        World w = loc.getWorld();
+        if (w != null) {
+            w.spawnParticle(Particle.DUST, loc.clone().add(0.5, 1.5, 0.5),
+                    80, 0.8, 0.8, 0.8, new Particle.DustOptions(Color.RED, 2f));
+            w.playSound(loc, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.8f, 0.6f);
+        }
+
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            p.sendMessage(Component.text("☽ " + player.getName() + " elkészítette a Blood Mace-t! ☽", NamedTextColor.DARK_RED));
+        }
+
+        removeDisplay(key);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            loc.getBlock().setType(Material.AIR);
+            altarEntity.remove();
+        }, 40L);
+    }
+
     // ─── Display ──────────────────────────────────────────────────
-    private void spawnDisplay(String key, Location blockLoc, ItemStack displayItem, boolean used) {
+    private void spawnDisplay(String key, Location blockLoc, ItemStack displayItem) {
         World world = blockLoc.getWorld();
         if (world == null) return;
 
@@ -253,24 +249,52 @@ public class BloodAltarListener implements Listener {
     public void removeDisplay(String key) {
         Item item = altarItems.remove(key);
         if (item != null && !item.isDead()) item.remove();
-
         List<ArmorStand> stands = altarHolograms.remove(key);
         if (stands != null) stands.forEach(s -> { if (!s.isDead()) s.remove(); });
-
         BukkitTask task = altarTasks.remove(key);
         if (task != null) task.cancel();
     }
 
-    // Clean up orphaned holograms on startup
-    public void cleanupOrphanedHolograms(World world) {
-        for (Entity e : world.getEntities()) {
-            if (!(e instanceof ArmorStand as)) continue;
-            if (as.getPersistentDataContainer().has(ALTAR_HOLO_KEY, PersistentDataType.STRING)) {
-                as.remove();
+    // ─── Cleanup orphaned holograms on startup ────────────────────
+    public void cleanupAllOrphanedHolograms() {
+        // Only remove hologram stands where the matching altar ArmorStand no longer exists
+        for (World world : Bukkit.getWorlds()) {
+            for (Entity e : world.getEntities()) {
+                if (!(e instanceof ArmorStand as)) continue;
+                if (!as.getPersistentDataContainer().has(ALTAR_HOLO_KEY, PersistentDataType.STRING)) continue;
+
+                String holoKey = as.getPersistentDataContainer().get(ALTAR_HOLO_KEY, PersistentDataType.STRING);
+                if (holoKey == null) { as.remove(); continue; }
+
+                // Check if a matching altar hitbox still exists nearby
+                boolean altarExists = false;
+                for (Entity nearby : world.getNearbyEntities(as.getLocation(), 6, 6, 6)) {
+                    if (!(nearby instanceof ArmorStand nearAs)) continue;
+                    if (!nearAs.getPersistentDataContainer().has(ALTAR_KEY, PersistentDataType.BYTE)) continue;
+                    String nearKey = nearAs.getPersistentDataContainer().get(ALTAR_LOC_KEY, PersistentDataType.STRING);
+                    if (holoKey.equals(nearKey)) { altarExists = true; break; }
+                }
+
+                if (!altarExists) as.remove();
             }
         }
     }
 
+    private void cleanupHologramsAt(Location loc, World world) {
+        for (Entity e : world.getNearbyEntities(loc.clone().add(0.5, 1.5, 0.5), 2, 3, 2)) {
+            if (!(e instanceof ArmorStand as)) continue;
+            if (as.getPersistentDataContainer().has(ALTAR_HOLO_KEY, PersistentDataType.STRING)) {
+                as.remove();
+            }
+            if (e instanceof Item dropped) {
+                if (dropped.getPersistentDataContainer().has(new NamespacedKey(plugin, "blood_altar"), PersistentDataType.BYTE)) {
+                    dropped.remove();
+                }
+            }
+        }
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────
     private String locKey(Location loc) {
         return loc.getWorld().getName() + "," + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
     }
@@ -290,11 +314,9 @@ public class BloodAltarListener implements Listener {
         int netherite = 0, bloodDrop = 0, mace = 0;
         for (ItemStack item : player.getInventory().getContents()) {
             if (item == null) continue;
-            if (item.getType() == Material.NETHERITE_INGOT && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY))
-                netherite += item.getAmount();
+            if (item.getType() == Material.NETHERITE_INGOT && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY)) netherite += item.getAmount();
             if (BloodItems.is(item, BloodItems.BLOOD_DROP_KEY)) bloodDrop += item.getAmount();
-            if (item.getType() == Material.MACE && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY))
-                mace += item.getAmount();
+            if (item.getType() == Material.MACE && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY)) mace += item.getAmount();
         }
         return netherite >= 8 && bloodDrop >= 4 && mace >= 1;
     }
