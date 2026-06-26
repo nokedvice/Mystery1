@@ -10,6 +10,7 @@ import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -140,6 +141,24 @@ public class BloodAltarListener implements Listener {
     @EventHandler
     public void onDamage(EntityDamageByEntityEvent event) {
         if (isAltar(event.getEntity())) event.setCancelled(true);
+    }
+
+    // When barrier block is broken, remove the altar display and hitbox stand
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+        if (block.getType() != Material.BARRIER) return;
+
+        Location bLoc = block.getLocation();
+        String key = locKey(bLoc);
+
+        // Remove display
+        removeDisplay(key);
+
+        // Remove hitbox ArmorStand
+        for (Entity e : bLoc.getWorld().getNearbyEntities(bLoc.clone().add(0.5, 0.5, 0.5), 1, 1, 1)) {
+            if (isAltar(e)) e.remove();
+        }
     }
 
     private void handleClick(Player player, String key, Location loc, Entity altarEntity) {
