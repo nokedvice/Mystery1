@@ -11,6 +11,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -66,6 +69,11 @@ public class BloodAltarListener implements Listener {
 
     public void resetMaceCrafted() {
         maceCrafted = false;
+        saveState();
+    }
+
+    public void setMaceCrafted(boolean value) {
+        maceCrafted = value;
         saveState();
     }
 
@@ -160,6 +168,58 @@ public class BloodAltarListener implements Listener {
         if (isAltar(event.getEntity())) event.setCancelled(true);
     }
 
+    // Prevent hopper minecarts from picking up the floating altar item
+    @EventHandler
+    public void onInventoryPickup(InventoryPickupItemEvent event) {
+        Item item = event.getItem();
+        if (isAltarFloatingItem(item)) event.setCancelled(true);
+    }
+
+    // Prevent any entity (hopper minecart etc) from picking up altar item
+    @EventHandler
+    public void onEntityPickup(EntityPickupItemEvent event) {
+        if (isAltarFloatingItem(event.getItem())) event.setCancelled(true);
+    }
+
+    // TNT/explosion near altar - remove floating item but keep altar
+    @EventHandler
+    public void onExplosion(EntityExplodeEvent event) {
+        // Check if any altar item is near the explosion
+        for (Map.Entry<String, Item> entry : new HashMap<>(altarItems).entrySet()) {
+            Item item = entry.getValue();
+            if (item == null || item.isDead()) continue;
+            if (item.getLocation().distance(event.getLocation()) <= 8) {
+                // Remove just the floating item, keep altar and task running
+                item.remove();
+                altarItems.remove(entry.getKey());
+                // Respawn item after 3 seconds
+                String key = entry.getKey();
+                Location loc = keyToLoc(key, event.getEntity().getWorld());
+                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                    if (altarTasks.containsKey(key)) {
+                        // Altar still active, respawn item
+                        Item newItem = loc.getWorld().dropItem(
+                                loc.clone().add(0.5, 1.5, 0.5), BloodItems.createBloodMace());
+                        newItem.setPickupDelay(Integer.MAX_VALUE);
+                        newItem.setVelocity(new org.bukkit.util.Vector(0,0,0));
+                        newItem.setGravity(false);
+                        newItem.setInvulnerable(true);
+                        newItem.setPersistent(true);
+                        altarItems.put(key, newItem);
+                    }
+                }, 60L);
+            }
+        }
+    }
+
+    private boolean isAltarFloatingItem(Item item) {
+        if (item == null) return false;
+        for (Item altarItem : altarItems.values()) {
+            if (altarItem != null && altarItem.equals(item)) return true;
+        }
+        return false;
+    }
+
     // ─── Click handler ────────────────────────────────────────────
     private void handleClick(Player player, String key, Location loc, Entity altarEntity) {
         ItemStack held = player.getInventory().getItemInMainHand();
@@ -185,7 +245,7 @@ public class BloodAltarListener implements Listener {
         }
         if (!hasIngredients(player)) {
             player.sendMessage(Component.text(
-                "Kell: 8 Netherite Ingot + 4 Vércsepp + 1 Mace", NamedTextColor.DARK_RED));
+                "Kell: 16 Netherite Ingot + 8 Vércsepp + 1 Mace", NamedTextColor.DARK_RED));
             return;
         }
 
@@ -229,8 +289,8 @@ public class BloodAltarListener implements Listener {
         String[] lines = {
             "§4§l✦ Blood Altar ✦",
             "§7Recept:",
-            "§6 8x §7Netherite Ingot",
-            "§6 4x §7Vércsepp",
+            "§6 16x §7Netherite Ingot",
+            "§6 8x §7Vércsepp",
             "§6 1x §7Mace",
             "§c§lJobb klikk a crafthoz"
         };
@@ -365,12 +425,12 @@ public class BloodAltarListener implements Listener {
             if (item.getType() == Material.MACE && !BloodItems.is(item, BloodItems.BLOOD_MACE_KEY))
                 mace += item.getAmount();
         }
-        return netherite >= 8 && bloodDrop >= 4 && mace >= 1;
+        return netherite >= 16 && bloodDrop >= 8 && mace >= 1;
     }
 
     private void consumeIngredients(Player player) {
-        removeAmount(player, Material.NETHERITE_INGOT, 8, null);
-        removeAmount(player, null, 4, BloodItems.BLOOD_DROP_KEY);
+        removeAmount(player, Material.NETHERITE_INGOT, 16, null);
+        removeAmount(player, null, 8, BloodItems.BLOOD_DROP_KEY);
         removeAmount(player, Material.MACE, 1, null);
     }
 

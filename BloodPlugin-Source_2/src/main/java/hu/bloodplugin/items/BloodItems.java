@@ -21,6 +21,7 @@ public class BloodItems {
     public static final String BLOOD_MACE_KEY      = "blood_mace";
     public static final String BLOOD_SHIELD_KEY    = "blood_shield";
     public static final String BLOOD_ALTAR_KEY     = "blood_altar_item";
+    public static final String GOD_SPEAR_KEY       = "god_spear";
 
     private static JavaPlugin plugin;
 
@@ -93,13 +94,12 @@ public class BloodItems {
         ItemMeta meta = item.getItemMeta();
         meta.displayName(Component.text("Blood Mace", NamedTextColor.DARK_RED).decoration(TextDecoration.ITALIC, false));
         meta.lore(List.of(
-            Component.text("Density VI | Fire Aspect III | Wind Burst II", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false),
+            Component.text("Density III | Wind Burst II | Unbreakable", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false),
             Component.text("Shift + Jobb klikk: 15 blokk feldobás (45s cd)", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
         ));
         meta.setCustomModelData(1005);
         meta.setUnbreakable(true);
-        meta.addEnchant(org.bukkit.enchantments.Enchantment.DENSITY, 6, true);
-        meta.addEnchant(org.bukkit.enchantments.Enchantment.FIRE_ASPECT, 3, true);
+        meta.addEnchant(org.bukkit.enchantments.Enchantment.DENSITY, 3, true);
         meta.addEnchant(org.bukkit.enchantments.Enchantment.WIND_BURST, 2, true);
         meta.getPersistentDataContainer().set(key(BLOOD_MACE_KEY), PersistentDataType.BYTE, (byte) 1);
         item.setItemMeta(meta);
@@ -116,6 +116,30 @@ public class BloodItems {
         ));
         meta.setCustomModelData(1006);
         meta.getPersistentDataContainer().set(key(BLOOD_SHIELD_KEY), PersistentDataType.BYTE, (byte) 1);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public static ItemStack createGodSpear() {
+        // Use NETHERITE_SPEAR as the God Spear base
+        ItemStack item = new ItemStack(Material.getMaterial("NETHERITE_SPEAR") != null
+            ? Material.getMaterial("NETHERITE_SPEAR") : Material.IRON_SPEAR);
+        if (item.getType() == null || item.getType() == Material.AIR) {
+            item = new ItemStack(Material.getMaterial("IRON_SPEAR"));
+        }
+        ItemMeta meta = item.getItemMeta();
+        meta.displayName(Component.text("God Spear", NamedTextColor.GOLD)
+                .decoration(TextDecoration.ITALIC, false));
+        meta.lore(List.of(
+            Component.text("Lunge III – Nincs cooldown", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false),
+            Component.text("Enchantolható normálisan", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+        ));
+        // Add Lunge III
+        org.bukkit.NamespacedKey lungeKey = new org.bukkit.NamespacedKey("minecraft", "lunge");
+        Enchantment lunge = Enchantment.getByKey(lungeKey);
+        if (lunge != null) meta.addEnchant(lunge, 3, true);
+        meta.setUnbreakable(true);
+        meta.getPersistentDataContainer().set(key(GOD_SPEAR_KEY), PersistentDataType.BYTE, (byte) 1);
         item.setItemMeta(meta);
         return item;
     }

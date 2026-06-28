@@ -37,6 +37,8 @@ public class BloodPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BloodOreListener(this), this);
         getServer().getPluginManager().registerEvents(new BloodMaceListener(this), this);
         getServer().getPluginManager().registerEvents(new ItemLimitListener(this), this);
+        getServer().getPluginManager().registerEvents(new MaceEnchantListener(this), this);
+        getServer().getPluginManager().registerEvents(new SpearListener(this), this);
 
         getCommand("bloodmoon").setExecutor(new BloodMoonCommand(this, bloodMoonManager));
 
@@ -46,6 +48,10 @@ public class BloodPlugin extends JavaPlugin {
 
         getCommand("altarspawn").setExecutor(new AltarSpawnCommand(this, altarListener));
         getCommand("altarcleanup").setExecutor(new AltarCleanupCommand(this));
+
+        SetLegendaryCommand setLegendaryCmd = new SetLegendaryCommand(this, altarListener);
+        getCommand("setlegendary").setExecutor(setLegendaryCmd);
+        getCommand("setlegendary").setTabCompleter(setLegendaryCmd);
 
         bloodMoonManager.startNightChecker();
 

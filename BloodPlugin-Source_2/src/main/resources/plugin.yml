@@ -22,6 +22,10 @@ commands:
     description: Remove all altar holograms and entities
     usage: /altarcleanup
     permission: bloodplugin.altarspawn
+  setlegendary:
+    description: Set legendary item crafted status
+    usage: /setlegendary status <item> <true|false>
+    permission: bloodplugin.legendary
 
 permissions:
   bloodplugin.bloodmoon:
