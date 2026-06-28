@@ -2,6 +2,8 @@ package hu.bloodplugin.listeners;
 
 import hu.bloodplugin.BloodPlugin;
 import hu.bloodplugin.items.BloodItems;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -9,12 +11,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.enchantment.EnchantItemEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
-import org.bukkit.inventory.AnvilInventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.Map;
 
@@ -22,26 +21,27 @@ public class MaceEnchantListener implements Listener {
 
     private final BloodPlugin plugin;
 
-    // Sima mace limits
-    private static final int MAX_DENSITY = 2;
-    private static final int MAX_BREACH   = 1;
+    // Sima Mace limits
+    private static final int MACE_MAX_DENSITY = 2;
+    private static final int MACE_MAX_BREACH  = 1;
+    // Wind Burst: unlimited on normal mace
 
     // Blood Mace limits
-    private static final int BLOOD_MAX_DENSITY   = 3;
+    private static final int BLOOD_MAX_DENSITY    = 3;
     private static final int BLOOD_MAX_WIND_BURST = 2;
 
     public MaceEnchantListener(BloodPlugin plugin) {
         this.plugin = plugin;
     }
 
-    // ─── Anvil result check ───────────────────────────────────────
+    // ─── Anvil ────────────────────────────────────────────────────
     @EventHandler(priority = EventPriority.HIGH)
     public void onAnvil(PrepareAnvilEvent event) {
         ItemStack result = event.getResult();
         if (result == null || result.getType() != Material.MACE) return;
 
-        boolean isBloodMace = BloodItems.is(result, BloodItems.BLOOD_MACE_KEY);
-        ItemStack fixed = fixEnchants(result, isBloodMace);
+        boolean isBlood = BloodItems.is(result, BloodItems.BLOOD_MACE_KEY);
+        ItemStack fixed = applyLimits(result.clone(), isBlood);
         if (fixed != null) event.setResult(fixed);
     }
 
@@ -52,62 +52,34 @@ public class MaceEnchantListener implements Listener {
         if (item.getType() != Material.MACE) return;
         if (BloodItems.is(item, BloodItems.BLOOD_MACE_KEY)) return;
 
-        // Check added enchants
         Map<Enchantment, Integer> added = event.getEnchantsToAdd();
-        boolean modified = false;
-
-        if (added.containsKey(Enchantment.DENSITY) && added.get(Enchantment.DENSITY) > MAX_DENSITY) {
-            added.put(Enchantment.DENSITY, MAX_DENSITY);
-            modified = true;
-        }
-        if (added.containsKey(Enchantment.BREACH) && added.get(Enchantment.BREACH) > MAX_BREACH) {
-            added.put(Enchantment.BREACH, MAX_BREACH);
-            modified = true;
-        }
-        // Wind Burst is NOT limited on normal mace
-        if (modified && event.getEnchanter() instanceof Player p) {
-            p.sendMessage(net.kyori.adventure.text.Component.text(
-                "A sima Mace-en Density max 2, Breach max 1 lehet! (Wind Burst szabad)",
-                net.kyori.adventure.text.format.NamedTextColor.RED));
-        }
-    }
-
-    // ─── Inventory click – catch /give or other methods ───────────
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) return;
-        ItemStack cursor = event.getCursor();
-        ItemStack current = event.getCurrentItem();
-
-        checkAndFix(cursor, player);
-        checkAndFix(current, player);
-    }
-
-    private void checkAndFix(ItemStack item, Player player) {
-        if (item == null || item.getType() != Material.MACE) return;
-        boolean isBlood = BloodItems.is(item, BloodItems.BLOOD_MACE_KEY);
-        ItemStack fixed = fixEnchants(item, isBlood);
-        if (fixed != null) {
-            item.setItemMeta(fixed.getItemMeta());
-            player.sendMessage(net.kyori.adventure.text.Component.text(
-                isBlood ? "Blood Mace enchantok limitálva (Density 3, Wind Burst 2)!"
-                        : "Sima Mace enchantok limitálva (Density 2, Breach 1)!",
-                net.kyori.adventure.text.format.NamedTextColor.RED));
-        }
-    }
-
-    /**
-     * Returns a corrected copy if any enchant exceeded limits, null if all OK.
-     */
-    private ItemStack fixEnchants(ItemStack item, boolean isBloodMace) {
-        if (item == null) return null;
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return null;
-
         boolean changed = false;
 
-        if (isBloodMace) {
-            // Blood Mace: Density max 3, Wind Burst max 2, keep unbreakable
+        if (added.containsKey(Enchantment.DENSITY) && added.get(Enchantment.DENSITY) > MACE_MAX_DENSITY) {
+            added.put(Enchantment.DENSITY, MACE_MAX_DENSITY);
+            changed = true;
+        }
+        if (added.containsKey(Enchantment.BREACH) && added.get(Enchantment.BREACH) > MACE_MAX_BREACH) {
+            added.put(Enchantment.BREACH, MACE_MAX_BREACH);
+            changed = true;
+        }
+        // Wind Burst: no limit on normal mace
+
+        if (changed) {
+            event.getEnchanter().sendMessage(Component.text(
+                "Sima Mace: Density max 2, Breach max 1! (Wind Burst szabad)",
+                NamedTextColor.RED));
+        }
+    }
+
+    // ─── Limits logic ─────────────────────────────────────────────
+    private ItemStack applyLimits(ItemStack item, boolean isBlood) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return null;
+        boolean changed = false;
+
+        if (isBlood) {
+            // Blood Mace: Density max 3, Wind Burst max 2, always Unbreakable
             if (meta.hasEnchant(Enchantment.DENSITY) && meta.getEnchantLevel(Enchantment.DENSITY) > BLOOD_MAX_DENSITY) {
                 meta.removeEnchant(Enchantment.DENSITY);
                 meta.addEnchant(Enchantment.DENSITY, BLOOD_MAX_DENSITY, true);
@@ -123,22 +95,21 @@ public class MaceEnchantListener implements Listener {
                 changed = true;
             }
         } else {
-            // Sima Mace: Density max 2, Breach max 1
-            if (meta.hasEnchant(Enchantment.DENSITY) && meta.getEnchantLevel(Enchantment.DENSITY) > MAX_DENSITY) {
+            // Sima Mace: Density max 2, Breach max 1, Wind Burst unlimited
+            if (meta.hasEnchant(Enchantment.DENSITY) && meta.getEnchantLevel(Enchantment.DENSITY) > MACE_MAX_DENSITY) {
                 meta.removeEnchant(Enchantment.DENSITY);
-                meta.addEnchant(Enchantment.DENSITY, MAX_DENSITY, true);
+                meta.addEnchant(Enchantment.DENSITY, MACE_MAX_DENSITY, true);
                 changed = true;
             }
-            if (meta.hasEnchant(Enchantment.BREACH) && meta.getEnchantLevel(Enchantment.BREACH) > MAX_BREACH) {
+            if (meta.hasEnchant(Enchantment.BREACH) && meta.getEnchantLevel(Enchantment.BREACH) > MACE_MAX_BREACH) {
                 meta.removeEnchant(Enchantment.BREACH);
-                meta.addEnchant(Enchantment.BREACH, MAX_BREACH, true);
+                meta.addEnchant(Enchantment.BREACH, MACE_MAX_BREACH, true);
                 changed = true;
             }
         }
 
         if (!changed) return null;
-        ItemStack copy = item.clone();
-        copy.setItemMeta(meta);
-        return copy;
+        item.setItemMeta(meta);
+        return item;
     }
 }

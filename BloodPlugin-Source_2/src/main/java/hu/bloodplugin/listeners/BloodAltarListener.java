@@ -287,7 +287,7 @@ public class BloodAltarListener implements Listener {
         altarItems.put(key, floatingItem);
 
         String[] lines = {
-            "§4§l✦ Blood Altar ✦",
+            "§4§l✦ Blood Mace ✦",
             "§7Recept:",
             "§6 16x §7Netherite Ingot",
             "§6 8x §7Vércsepp",

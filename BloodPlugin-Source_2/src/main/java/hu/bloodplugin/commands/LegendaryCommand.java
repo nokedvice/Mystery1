@@ -23,7 +23,7 @@ public class LegendaryCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ITEMS = List.of(
         "blood", "blood_shard", "blood_gem", "blood_mace",
-        "finisher_potion", "blood_shield", "god_spear"
+        "finisher_potion", "blood_shield"
     );
 
     public LegendaryCommand(BloodPlugin plugin, BloodAltarListener altarListener) {
@@ -103,7 +103,6 @@ public class LegendaryCommand implements CommandExecutor, TabCompleter {
             case "blood_mace"      -> BloodItems.createBloodMace();
             case "finisher_potion" -> BloodItems.createFinisherPotion();
             case "blood_shield"    -> BloodItems.createBloodShield();
-            case "god_spear"       -> BloodItems.createGodSpear();
             default                -> null;
         };
     }

@@ -21,7 +21,6 @@ public class BloodItems {
     public static final String BLOOD_MACE_KEY      = "blood_mace";
     public static final String BLOOD_SHIELD_KEY    = "blood_shield";
     public static final String BLOOD_ALTAR_KEY     = "blood_altar_item";
-    public static final String GOD_SPEAR_KEY       = "god_spear";
 
     private static JavaPlugin plugin;
 
@@ -120,29 +119,6 @@ public class BloodItems {
         return item;
     }
 
-    public static ItemStack createGodSpear() {
-        // Use NETHERITE_SPEAR as the God Spear base
-        ItemStack item = new ItemStack(Material.getMaterial("NETHERITE_SPEAR") != null
-            ? Material.getMaterial("NETHERITE_SPEAR") : Material.IRON_SPEAR);
-        if (item.getType() == null || item.getType() == Material.AIR) {
-            item = new ItemStack(Material.getMaterial("IRON_SPEAR"));
-        }
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text("God Spear", NamedTextColor.GOLD)
-                .decoration(TextDecoration.ITALIC, false));
-        meta.lore(List.of(
-            Component.text("Lunge III – Nincs cooldown", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false),
-            Component.text("Enchantolható normálisan", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
-        ));
-        // Add Lunge III
-        org.bukkit.NamespacedKey lungeKey = new org.bukkit.NamespacedKey("minecraft", "lunge");
-        Enchantment lunge = Enchantment.getByKey(lungeKey);
-        if (lunge != null) meta.addEnchant(lunge, 3, true);
-        meta.setUnbreakable(true);
-        meta.getPersistentDataContainer().set(key(GOD_SPEAR_KEY), PersistentDataType.BYTE, (byte) 1);
-        item.setItemMeta(meta);
-        return item;
-    }
 
     public static ItemStack createBloodAltarItem() {
         ItemStack item = new ItemStack(Material.BARRIER);
